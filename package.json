@@ -2,7 +2,7 @@
   "name": "codex-rebuild",
   "productName": "Codex",
   "version": "26.803.41515",
-  "description": "Customized cross-platform Codex Desktop build with the official OpenAI Codex CLI / 基于官方 OpenAI Codex CLI 的跨平台 Codex Desktop 定制构建",
+  "description": "Customized cross-platform Codex Desktop build with independent patches and the official OpenAI Codex CLI",
   "main": "src/.vite/build/bootstrap.js",
   "scripts": {
     "start": "node scripts/start-dev.js",
