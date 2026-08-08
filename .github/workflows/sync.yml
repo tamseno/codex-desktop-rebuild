@@ -1,4 +1,4 @@
-name: Sync Upstream & Patch
+name: "Sync Upstream Inputs, Patch & Release / 同步上游输入、应用补丁并发布"
 
 on:
   schedule:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       force:
-        description: "Force sync even without version change"
+        description: "Force sync even without version change / 即使版本未变化也强制同步"
         type: boolean
         default: false
 
@@ -19,19 +19,19 @@ jobs:
     outputs:
       has_update: ${{ steps.detect.outputs.has_update }}
     steps:
-      - name: Checkout
+      - name: Checkout / 检出代码
         uses: actions/checkout@v6
 
-      - name: Setup Node.js
+      - name: Setup Node.js / 设置 Node.js
         uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Install dependencies
+      - name: Install dependencies / 安装依赖
         run: npm ci
 
-      - name: Check upstream versions
+      - name: Check upstream versions / 检查上游版本
         id: detect
         run: |
           set +e
@@ -61,33 +61,33 @@ jobs:
       matrix:
         arch: [x64, arm64]
     steps:
-      - name: Checkout
+      - name: Checkout / 检出代码
         uses: actions/checkout@v6
 
-      - name: Setup Node.js
+      - name: Setup Node.js / 设置 Node.js
         uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Install dependencies
+      - name: Install dependencies / 安装依赖
         run: |
           npm ci
 
-      - name: Install tools
+      - name: Install tools / 安装工具
         run: |
           brew install --quiet sevenzip
 
-      - name: Sync upstream (macOS only)
+      - name: Sync upstream (macOS only) / 同步上游（仅 macOS）
         run: node scripts/sync-upstream.js --force --skip-win
 
-      - name: Patch
+      - name: Apply patches / 应用补丁
         run: node scripts/patch-all.js mac-${{ matrix.arch }}
 
-      - name: Build
+      - name: Build / 构建
         run: npm run build:mac-${{ matrix.arch }}
 
-      - name: Upload artifacts
+      - name: Upload artifacts / 上传构建产物
         uses: actions/upload-artifact@v7
         with:
           name: Codex-macOS-${{ matrix.arch }}
@@ -99,38 +99,38 @@ jobs:
     if: needs.check.outputs.has_update == 'true'
     runs-on: windows-latest
     steps:
-      - name: Checkout
+      - name: Checkout / 检出代码
         uses: actions/checkout@v6
 
-      - name: Setup Node.js
+      - name: Setup Node.js / 设置 Node.js
         uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Install dependencies
+      - name: Install dependencies / 安装依赖
         run: |
           npm ci
 
-      - name: Install tools
+      - name: Install tools / 安装工具
         run: |
           choco install 7zip -y
 
-      - name: Add 7zz alias
+      - name: Add 7zz alias / 添加 7zz 别名
         run: |
           Copy-Item "C:\Program Files\7-Zip\7z.exe" "C:\Program Files\7-Zip\7zz.exe"
           echo "C:\Program Files\7-Zip" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
 
-      - name: Sync upstream (Windows only)
+      - name: Sync upstream (Windows only) / 同步上游（仅 Windows）
         run: node scripts/sync-upstream.js --force --skip-mac
 
-      - name: Patch
+      - name: Apply patches / 应用补丁
         run: node scripts/patch-all.js win
 
-      - name: Build
+      - name: Build / 构建
         run: npm run build:win-x64
 
-      - name: Upload artifacts
+      - name: Upload artifacts / 上传构建产物
         uses: actions/upload-artifact@v7
         with:
           name: Codex-Windows-x64
@@ -146,34 +146,34 @@ jobs:
       matrix:
         arch: [x64, arm64]
     steps:
-      - name: Checkout
+      - name: Checkout / 检出代码
         uses: actions/checkout@v6
 
-      - name: Setup Node.js
+      - name: Setup Node.js / 设置 Node.js
         uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Install system dependencies
+      - name: Install system dependencies / 安装系统依赖
         run: |
           sudo apt-get update
           sudo apt-get install -y rpm fakeroot dpkg 7zip
 
-      - name: Install dependencies
+      - name: Install dependencies / 安装依赖
         run: |
           npm ci
 
-      - name: Sync upstream (macOS ZIP for unix, skip Windows)
+      - name: Sync upstream (Unix input, skip Windows) / 同步上游（Unix 输入，跳过 Windows）
         run: node scripts/sync-upstream.js --force --skip-win
 
-      - name: Patch
+      - name: Apply patches / 应用补丁
         run: node scripts/patch-all.js mac-${{ matrix.arch }}
 
-      - name: Build
+      - name: Build / 构建
         run: npm run build:linux-${{ matrix.arch }}
 
-      - name: Upload artifacts
+      - name: Upload artifacts / 上传构建产物
         uses: actions/upload-artifact@v7
         with:
           name: Codex-Linux-${{ matrix.arch }}
@@ -193,20 +193,20 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout
+      - name: Checkout / 检出代码
         uses: actions/checkout@v6
         with:
           token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
 
-      - name: Setup Node.js
+      - name: Setup Node.js / 设置 Node.js
         uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Install dependencies
+      - name: Install dependencies / 安装依赖
         run: npm ci
 
-      - name: Get upstream version and tag
+      - name: Get upstream version and tag / 获取上游版本并创建标签
         id: version
         run: |
           RESULT=$(node scripts/check-update.js --json --force)
@@ -238,23 +238,28 @@ jobs:
           git tag -a "v${VERSION}" -m "Codex ${VERSION}"
           git push origin HEAD --tags
 
-      - name: Download all artifacts
+      - name: Download all artifacts / 下载全部构建产物
         uses: actions/download-artifact@v7
         with:
           path: artifacts
 
-      - name: Display structure
+      - name: Display structure / 显示产物结构
         run: ls -lhR artifacts/
 
-      - name: Create Release
+      - name: Create Release / 创建 Release
         if: steps.version.outputs.version != ''
         uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ steps.version.outputs.version }}
           name: Codex ${{ steps.version.outputs.version }}
           body: |
-            ## Upstream Versions
-            | Platform | Version |
+            ## Customized build / 定制构建
+            This release is generated by this repository's independent patch,
+            staging, and official CLI integration pipeline.
+            本发行版由本仓库独立维护的补丁、资源 staging 和官方 CLI 集成流程生成。
+
+            ## Upstream Versions / 上游版本
+            | Platform / 平台 | Version / 版本 |
             |----------|---------|
             | macOS arm64 | `${{ steps.version.outputs.mac_arm64 || 'N/A' }}` |
             | macOS x64 | `${{ steps.version.outputs.mac_x64 || 'N/A' }}` |

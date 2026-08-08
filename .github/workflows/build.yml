@@ -1,10 +1,10 @@
-name: Build & Release (Manual)
+name: "Build & Release (Manual) / 构建与发布（手动）"
 
 on:
   workflow_dispatch:
     inputs:
       platform:
-        description: "Target platform"
+        description: "Target platform / 目标平台"
         required: false
         default: "all"
         type: choice
