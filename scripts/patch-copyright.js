@@ -1,5 +1,5 @@
 /**
- * Post-build patch: Update copyright text
+ * Post-build patch: Keep the official OpenAI copyright text
  *
  * Uses AST to locate `setAboutPanelOptions({ copyright: "(c) OpenAI" })`
  * and replace the copyright string with a custom value.
@@ -18,7 +18,7 @@ const { locateBundles, relPath } = require("./patch-util");
 // ──────────────────────────────────────────────
 
 const OLD_COPYRIGHT = "\u00A9 OpenAI"; // (c) OpenAI
-const NEW_COPYRIGHT = "\u00A9 OpenAI \u00B7 Cometix Space"; // (c) OpenAI . Cometix Space
+const NEW_COPYRIGHT = "\u00A9 OpenAI"; // (c) OpenAI
 
 // ──────────────────────────────────────────────
 //  AST walker

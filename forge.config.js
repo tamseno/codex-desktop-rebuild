@@ -61,7 +61,7 @@ module.exports = {
       name: "@electron-forge/maker-squirrel",
       config: {
         name: "Codex",
-        authors: "OpenAI, Cometix Space",
+        authors: "OpenAI",
         description: "Codex Desktop App",
         setupIcon: "./resources/electron.ico",
         iconUrl: "https://raw.githubusercontent.com/Haleclipse/CodexDesktop-Rebuild/master/resources/electron.ico",
@@ -70,7 +70,7 @@ module.exports = {
     { name: "@electron-forge/maker-zip", platforms: ["win32"] },
     {
       name: "@electron-forge/maker-deb",
-      config: { options: { name: "codex", productName: "Codex", genericName: "AI Coding Assistant", categories: ["Development", "Utility"], bin: "Codex", maintainer: "Cometix Space", homepage: "https://github.com/Haleclipse/CodexDesktop-Rebuild", icon: "./resources/electron.png" } },
+      config: { options: { name: "codex", productName: "Codex", genericName: "AI Coding Assistant", categories: ["Development", "Utility"], bin: "Codex", maintainer: "OpenAI", homepage: "https://github.com/Haleclipse/CodexDesktop-Rebuild", icon: "./resources/electron.png" } },
     },
     {
       name: "@electron-forge/maker-rpm",

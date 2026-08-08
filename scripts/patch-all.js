@@ -18,7 +18,6 @@ const PATCHES = [
   "patch-fast-mode.js",
   "patch-plugin-auth.js",
   "patch-updater.js",
-  "patch-archive-delete.js",
 ];
 
 function main() {

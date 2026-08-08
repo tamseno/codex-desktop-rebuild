@@ -24,6 +24,7 @@
     "build:all": "npm run build:mac && npm run build:win && npm run build:linux",
     "sync": "node scripts/sync-upstream.js",
     "check-update": "node scripts/check-update.js",
+    "verify:codex": "node scripts/verify-codex-cli.js",
     "bump-version": "node scripts/bump-version.js",
     "rebuild:native": "electron-rebuild"
   },

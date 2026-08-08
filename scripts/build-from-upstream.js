@@ -3,7 +3,8 @@
  * build-from-upstream.js — Patch upstream Codex and repackage
  *
  * For macOS and Windows: no forge needed.
- * Takes the upstream app, patches ASAR in-place, replaces codex CLI, outputs distributable.
+ * Takes the upstream app, patches ASAR in-place, stages the official Codex CLI,
+ * and outputs a distributable.
  *
  * Usage:
  *   node scripts/build-from-upstream.js --platform mac-arm64
@@ -13,16 +14,15 @@
 const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
+const {
+  resolveCodexVersion,
+  resolveVendorRoot,
+  stageResources,
+} = require("./codex-cli");
 
 const PROJECT_ROOT = path.resolve(__dirname, "..");
 const SRC_DIR = path.join(PROJECT_ROOT, "src");
 const OUT_DIR = path.join(PROJECT_ROOT, "out");
-
-const TARGET_TRIPLE_MAP = {
-  "mac-arm64": "aarch64-apple-darwin",
-  "mac-x64": "x86_64-apple-darwin",
-  "win": "x86_64-pc-windows-msvc",
-};
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -49,55 +49,32 @@ function copyRecursive(src, dest) {
   return count;
 }
 
-function resolveCodexVendor(platform) {
-  const triple = TARGET_TRIPLE_MAP[platform];
-  if (!triple) return null;
-  const binName = platform === "win" ? "codex.exe" : "codex";
-
-  // Try platform-specific package (0.128+)
-  const PKG_MAP = { "mac-arm64": "codex-darwin-arm64", "mac-x64": "codex-darwin-x64", "win": "codex-win32-x64" };
-  const platPkg = PKG_MAP[platform];
-  if (platPkg) {
-    const p = path.join(PROJECT_ROOT, "node_modules", "@cometix", platPkg, "vendor", triple, "codex", binName);
-    if (fs.existsSync(p)) return p;
-  }
-  // Try old-style vendor (pre-0.128)
-  const localPath = path.join(PROJECT_ROOT, "node_modules", "@cometix", "codex", "vendor", triple, "codex", binName);
-  if (fs.existsSync(localPath)) return localPath;
-
-  // npm pack fallback — fetch platform-specific package
-  // First get latest cometix base version, then append platform suffix
-  const PLAT_SUFFIX = {
-    "mac-arm64": "darwin-arm64", "mac-x64": "darwin-x64",
-    "win": "win32-x64",
-    "linux-x64": "linux-x64", "linux-arm64": "linux-arm64",
-  };
-  const suffix = PLAT_SUFFIX[platform];
-  if (!suffix) return null;
-
-  let baseVer;
-  try {
-    baseVer = execSync("npm view @cometix/codex version", { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
-  } catch { return null; }
-
-  // e.g. "0.128.0-cometix" → "@cometix/codex@0.128.0-cometix-darwin-x64"
-  const platPkgSpec = `@cometix/codex@${baseVer}-${suffix}`;
-  console.log(`   [codex] fetching ${platPkgSpec} via npm pack...`);
-  const tmpDir = path.join(require("os").tmpdir(), "cometix-codex-pack");
-  fs.mkdirSync(tmpDir, { recursive: true });
-  try {
-    const tgzName = execSync(`npm pack ${platPkgSpec} --pack-destination "${tmpDir}"`, {
-      cwd: tmpDir, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"],
-    }).trim().split("\n").pop();
-    const extractDir = path.join(tmpDir, "extracted");
-    clearDir(extractDir);
-    execSync(`tar xzf "${path.join(tmpDir, tgzName)}" -C "${extractDir}"`, { stdio: "pipe" });
-    const p = path.join(extractDir, "package", "vendor", triple, "codex", binName);
-    if (fs.existsSync(p)) return p;
-  } catch (e) {
-    console.log(`   [!] npm pack failed: ${e.message}`);
+function findExecutable(names) {
+  const resolver = process.platform === "win32" ? "where.exe" : "which";
+  for (const name of names) {
+    try {
+      execSync(`${resolver} ${name}`, { stdio: "pipe" });
+      return name;
+    } catch {}
   }
   return null;
+}
+
+function createZip(sourceDir, archivePath) {
+  const sevenZip = findExecutable(["7zz", "7z"]);
+  if (sevenZip) {
+    execSync(`${sevenZip} a -tzip -mx=5 "${archivePath}" .`, { cwd: sourceDir });
+    return;
+  }
+
+  const tar = findExecutable(["tar", "bsdtar"]);
+  if (tar) {
+    console.log(`   [zip] 7-Zip not found; using ${tar}`);
+    execSync(`${tar} -a -c -f "${archivePath}" -C "${sourceDir}" .`, { stdio: "inherit" });
+    return;
+  }
+
+  throw new Error("No ZIP tool found. Install 7-Zip (7zz/7z) or a bsdtar-compatible tar.");
 }
 
 // ─── macOS build ────────────────────────────────────────────────
@@ -161,8 +138,8 @@ function buildMac(platform) {
   try { execSync(`codesign --remove-signature "${outApp}"`, { stdio: "pipe" }); } catch {}
   try { execSync(`xattr -rd com.apple.quarantine "${outApp}"`, { stdio: "pipe" }); } catch {}
 
-  // 6. Replace codex CLI
-  replaceCodex(platform, resourcesDir, "codex");
+  // 6. Stage official Codex CLI resources
+  stageCodex(platform, resourcesDir, "codex");
 
   // 7. Ad-hoc re-sign (prevents "damaged app" Gatekeeper error)
   console.log("   [codesign] ad-hoc signing");
@@ -227,24 +204,24 @@ function buildWin(platform) {
   console.log(`   [integrity] new hash: ${newHash.slice(0, 16)}...`);
 
   if (oldHash !== newHash) {
-    // Find Codex.exe in app root
-    const exePath = path.join(outApp, "Codex.exe");
-    if (fs.existsSync(exePath)) {
-      patchExeHash(exePath, oldHash, newHash);
-    } else {
-      console.log("   [!] Codex.exe not found for hash patching");
+    const patched = ["ChatGPT.exe", "Codex.exe"]
+      .map((name) => path.join(outApp, name))
+      .filter((exePath) => fs.existsSync(exePath))
+      .some((exePath) => patchExeHash(exePath, oldHash, newHash));
+    if (!patched) {
+      console.log("   [integrity] no embedded ASAR hash found in launcher executable; no patch needed");
     }
   }
 
-  // Replace codex CLI
-  replaceCodex(platform, resourcesDir, "codex.exe");
+  // Stage official Codex CLI resources
+  stageCodex(platform, resourcesDir, "codex.exe");
 
   // Create ZIP
   const version = getVersion(asarDir);
   const zipName = `Codex-win-x64-${version}.zip`;
   const zipPath = path.join(OUT_DIR, zipName);
   console.log(`   [zip] ${zipName}`);
-  execSync(`7zz a -tzip -mx=5 "${zipPath}" .`, { cwd: outApp });
+  createZip(outApp, zipPath);
 
   const sizeMB = (fs.statSync(zipPath).size / 1048576).toFixed(1);
   console.log(`   [ok] ${zipPath} (${sizeMB} MB)`);
@@ -265,12 +242,12 @@ function patchExeHash(exePath, oldHash, newHash) {
   const oldBuf = Buffer.from(oldHash, "ascii");
   const idx = buf.indexOf(oldBuf);
   if (idx < 0) {
-    console.log("   [!] old hash not found in exe");
-    return;
+    return false;
   }
   Buffer.from(newHash, "ascii").copy(buf, idx);
   fs.writeFileSync(exePath, buf);
-  console.log(`   [integrity] exe hash patched at offset ${idx}`);
+  console.log(`   [integrity] ${path.basename(exePath)} hash patched at offset ${idx}`);
+  return true;
 }
 
 function updateAsarIntegrity(asarPath, infoPlistPath) {
@@ -289,16 +266,17 @@ function updateAsarIntegrity(asarPath, infoPlistPath) {
 
 // ─── Shared ─────────────────────────────────────────────────────
 
-function replaceCodex(platform, resourcesDir, binName) {
-  const vendor = resolveCodexVendor(platform);
-  if (vendor) {
-    const dest = path.join(resourcesDir, binName);
-    fs.copyFileSync(vendor, dest);
-    try { fs.chmodSync(dest, 0o755); } catch {}
-    console.log(`   [codex] replaced with @cometix/codex`);
-  } else {
-    console.log(`   [!] @cometix/codex not found, keeping upstream codex`);
+function stageCodex(platform, resourcesDir, binName) {
+  const expectedName = platform === "win" ? "codex.exe" : "codex";
+  if (binName !== expectedName) {
+    throw new Error(`Unexpected CLI name for ${platform}: ${binName}`);
   }
+
+  const codexVersion = resolveCodexVersion();
+  const vendorRoot = resolveVendorRoot(PROJECT_ROOT, platform, { version: codexVersion });
+  const staged = stageResources(vendorRoot, resourcesDir, platform, codexVersion);
+  console.log(`   [codex] staged official @openai/codex ${codexVersion}`);
+  console.log(`   [resources] ${staged.copied.length} official CLI files`);
 }
 
 function getVersion(asarDir) {
